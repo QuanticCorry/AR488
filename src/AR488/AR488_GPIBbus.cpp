@@ -501,8 +501,10 @@ bool GPIBbus::receiveData(Stream& dataStream, bool detectEoi, bool detectEndByte
     if (txBreak) break;
 
     // ATN asserted
-    if (isAsserted(ATN)) break;
-
+    if (isAsserted(ATN)){
+      break;
+    } 
+    
     // Read the next character on the GPIB bus
     r = readByte(&bytes[0], readWithEoi, &eoiDetected);
 
@@ -522,6 +524,9 @@ bool GPIBbus::receiveData(Stream& dataStream, bool detectEoi, bool detectEndByte
 
       // Byte counter
       x++;
+      #ifdef DEBUG_GPIBbus_RECEIVE
+      DB_PRINT(F("Bytes read_EZ:  "), x);
+      #endif
 
       // EOI detection enabled and EOI detected?
       if (readWithEoi) {
@@ -545,6 +550,7 @@ bool GPIBbus::receiveData(Stream& dataStream, bool detectEoi, bool detectEndByte
   }
 
 #ifdef DEBUG_GPIBbus_RECEIVE
+  DB_PRINT(F("mode is "), cfg.cmode);
   DB_RAW_PRINTLN();
   DB_PRINT(F("After loop flags:"),"");
 //  DB_PRINT(F("ATN: "), (isAsserted(ATN ? 1 : 0));
@@ -859,14 +865,14 @@ void GPIBbus::setControls(uint8_t state) {
 #endif
       break;
 
-    case DLAS:  // Device listner active (actively listening - can handshake)
+          case DLAS:  // Device listner active (actively listening - can handshake)
 #ifdef SN7516X
       digitalWrite(SN7516X_TE,LOW);
 #endif      
       setGpibState(0b00000110, 0b00011110, 1);
       setGpibState(0b11111001, 0b00011110, 0);
 #ifdef DEBUG_GPIBbus_CONTROL
-      DB_PRINT(F("Set GPIB lines to idle state"),"");
+      DB_PRINT(F("Set GPIB lines to idle state and can handshake"),"");
 #endif
       break;
 
@@ -1016,7 +1022,6 @@ uint8_t GPIBbus::readByte(uint8_t *db, bool readWithEoi, bool *eoi) {
 
   // Wait for interval to expire
   while ( (unsigned long)(currentMillis - startMillis) < timeval ) {
-
     if (cfg.cmode == 1) {
       // If IFC has been asserted then abort
       if (isAsserted(IFC)) {
@@ -1045,7 +1050,7 @@ uint8_t GPIBbus::readByte(uint8_t *db, bool readWithEoi, bool *eoi) {
       // Wait for DAV to go LOW indicating talker has finished setting data lines..
 //      if (digitalRead(DAV) == LOW) {
       if (getGpibPinState(DAV) == LOW) {
-        // Assert NRFD (Busy reading data)
+        // Assert NRFD (Busy reading data)        
         setGpibState(0b00000000, 0b00000100, 0);
         stage = 7;
       }
@@ -1058,6 +1063,7 @@ uint8_t GPIBbus::readByte(uint8_t *db, bool readWithEoi, bool *eoi) {
       *db = readGpibDbus();
       // Unassert NDAC signalling data accepted
       setGpibState(0b00000010, 0b00000010, 0);
+      _delay_us(50);
       stage = 8;
     }
 
@@ -1078,14 +1084,16 @@ uint8_t GPIBbus::readByte(uint8_t *db, bool readWithEoi, bool *eoi) {
   }
 
   // Completed
-  if (stage == 9) return 0;
+  if (stage == 9) {
+    return 0;
+  }
 
 //  if (stage==1) return 4;
 //  if (stage==2) return 3;
   
   // Otherwise return stage
 #ifdef DEBUG_GPIBbus_RECEIVE
-  if ( (stage==4) || (stage==8) ) {
+  if ( (stage==6) || (stage==8) ) {
     DB_PRINT(F("DAV timout!"),"");
   }else{
     DB_PRINT(F("Error: "), stage);

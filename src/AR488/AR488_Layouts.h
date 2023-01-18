@@ -139,8 +139,8 @@
 #define EOI   40  /* GPIB 5  : PORTL bit 3 */
 #define REN   38  /* GPIB 17 : PORTL bit 1 */
 
-#define SRQ   50  /* GPIB 10 : PORTB bit 1 */
-#define ATN   52  /* GPIB 11 : PORTB bit 3 */
+#define SRQ   47  /* GPIB 10 : PORTG bit 2 */
+#define ATN   49  /* GPIB 11 : PORTG bit 0  */
 
 /*
 // PCINT registers

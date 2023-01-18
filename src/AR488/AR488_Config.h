@@ -56,10 +56,10 @@
 /*** MEGA 2560 board ***/
 #elif __AVR_ATmega2560__
   /*** Board/layout selection ***/
-  #define AR488_MEGA2560_D
-  //#define AR488_MEGA2560_E1
+  //#define AR488_MEGA2560_D
+  #define AR488_MEGA2560_E1
   //#define AR488_MEGA2560_E2
-//  #define AR488_MCP23S17
+  //#define AR488_MCP23S17
   //#define AR488_MCP23017
 
 /***** Panduino Mega 644 or Mega 1284 board *****/
@@ -96,7 +96,7 @@
 //#define DEBUG_ENABLE
 #ifdef DEBUG_ENABLE
   // Serial port device
-  #define DB_SERIAL_PORT Serial
+  #define DB_SERIAL_PORT Serial3
   // #define DB_SERIAL_SWPORT
   // Set port operating speed
   #define DB_SERIAL_SPEED 115200
@@ -124,45 +124,20 @@
  * for SN7516x, MCP23S17 and MCP23017 chips.
  */
 
-
-/***** Enable MCP23S17 chip *****/
-/*
- * This version uses the SPI interface with speeds up to 10MHz max
- * Note: Use #define MCP23S17 as the layout definition
- */
-#ifdef AR488_MCP23S17
-  #define MCP_ADDRESS   0
-  #define MCP_SELECTPIN 10
-  #define MCP_INTERRUPT 2
-#endif
-
-
-/***** Enable MCP23017 chip *****/
-/*
- * This version uses the I2C interface with speeds of 100kHz, 400kHz and 1,7MHz
- * Pull up resistors (4.7k) are required on the SDA and SCL pins
- * Note: Use #define MCP23017 as the layout definition
- */
-#ifdef AR488_MCP23017
-  #define MCP_ADDRESS   1
-  #define MCP_INTERRUPT 3
-#endif
-
-
 /***** Enable SN7516x chips *****/
 /*
  * Uncomment to enable the use of SN7516x GPIB tranceiver ICs.
  * This will require the use of an additional GPIO pin to control
  * the read and write modes of the ICs.
  */
-//#define SN7516X
+#define SN7516X
 #ifdef SN7516X
-//  #define SN7516X_TE 6
-//  #define SN7516X_DC 13
-//  #define SN7516X_SC 12
+  //#define SN7516X_TE 51
+  //#define SN7516X_DC 53
+  //#define SN7516X_SC 12
   // ONLYA board
-  #define SN7516X_TE 13
-  #define SN7516X_DC 5
+  #define SN7516X_TE 43
+  #define SN7516X_DC 45
 #endif
 
 
@@ -183,7 +158,7 @@
  * and will respond faster, however in-loop checking for state of pin states
  * can be supported with any board layout.
  */
-/* 
+ 
 #ifdef __AVR__
   // For supported boards use interrupt handlers
   #if defined (AR488_UNO) || defined (AR488_NANO) || defined (AR488_MEGA2560) || defined (AR488_MEGA32U4)
@@ -194,7 +169,7 @@
     #endif
   #endif
 #endif
-*/
+
 
 
 /***** Local/remote signal (LED) *****/
@@ -202,7 +177,7 @@
 
 
 /***** 8-way address DIP switch *****/
-#define DIP_SWITCH
+//#define DIP_SWITCH
 #ifdef DIP_SWITCH
 #define DIP_SW_1  A0
 #define DIP_SW_2  A1
@@ -214,13 +189,6 @@
 #define DIP_SW_8  A7
 
 #endif
-
-
-/***** Acknowledge interface is ready *****/
-//#define SAY_HELLO
-
-
-
 
 /***** DEBUG LEVEL OPTIONS *****/
 /*
