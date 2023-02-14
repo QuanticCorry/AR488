@@ -153,7 +153,7 @@ class GPIBbus {
     bool sendCmd(uint8_t cmdByte);
     uint8_t readByte(uint8_t *db, bool readWithEoi, bool *eoi);
     uint8_t writeByte(uint8_t db, bool isLastByte);
-    bool receiveData(Stream& dataStream, bool detectEoi, bool detectEndByte, uint8_t endByte);
+    bool receiveData(Stream& dataStream, bool detectEoi, bool detectEndByte, uint8_t endByte, uint8_t *bytes, uint8_t *numbytes);
     void sendData(char *data, uint8_t dsize);
     void clearDataBus();
     void setControlVal(uint8_t value, uint8_t mask, uint8_t mode);

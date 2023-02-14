@@ -10,6 +10,18 @@
 #include <SPI.h>
 #include <Ethernet.h>
 
+//TODO
+/*
+DIP switches for address
+temperature reading and control of fan
+Status LED
+Power LED and analog input to read 12V nd 24V inputs
+verify relays are set correctly using parallelToSerial() and populate response buffer with "OK." when true, else "."
+implement ethernet/telnet part of code
+ability to change IP address???
+*/
+
+
 
 /*******************************/
 /***** SERIAL PARSE BUFFER *****/
@@ -17,14 +29,26 @@
 /*
  * Note: Arduino serial input buffer is 64 
  */
-// Serial input parsing buffer
+/***** ^^^^^^^^^^^^^^^^^^^ *****/
+/***** SERIAL INPUT PARSE BUFFER *****/
+/*******************************/
 static const uint8_t PBSIZE = 128;
 char pBuf[PBSIZE];
 uint8_t pbPtr = 0;
 
-/***** ^^^^^^^^^^^^^^^^^^^ *****/
-/***** SERIAL PARSE BUFFER *****/
 /*******************************/
+/***** GPIB PARSE BUFFER *****/
+/***** vvvvvvvvvvvvvvvvvvv *****/
+
+static const uint8_t GPIB_BSIZE = 64;
+uint8_t GPIB_Buf[GPIB_BSIZE];
+uint8_t gpib_Ptr = 0;
+
+/***** ^^^^^^^^^^^^^^^^^^^ *****/
+/***** SHIFT REGISTER BUFFER *****/
+/*******************************/
+
+static union shiftRegister SRbuf;
 
 //start GPIB section
 
@@ -184,6 +208,8 @@ bool isVerb = false;
 
 // CR/LF terminated line ready to process
 uint8_t lnRdy = 0;
+// only do first time through main loop
+bool isInit = true;
 
 // GPIB data receive flags
 bool autoRead = false;         // Auto reading (auto mode 3) GPIB data in progress
@@ -216,6 +242,9 @@ uint8_t runMacro = 0;
 
 // Send response to *idn?
 bool sendIdn = false;
+
+//number of bytes read from GPIB
+uint8_t GPIB_length = 0;
 //end GPIB section
 
 // start Ethernet section
@@ -252,8 +281,35 @@ void setup() {
   wdt_disable();
 #endif
 
+pinMode(GP_LED, OUTPUT);
+digitalWrite(GP_LED, LOW);
+pinMode(FAN_ON, OUTPUT);
+digitalWrite(FAN_ON, LOW);
+pinMode(STATUS_IND, OUTPUT);
+digitalWrite(STATUS_IND, LOW);
+pinMode(POWERGOOD, OUTPUT);
+digitalWrite(POWERGOOD, LOW);
+pinMode(SR1_IN, OUTPUT);
+digitalWrite(SR1_IN, LOW);
+pinMode(SPICLK1, OUTPUT);
+digitalWrite(SPICLK1, LOW);
+pinMode(L_CLK1, OUTPUT);
+digitalWrite(L_CLK1, LOW);
+pinMode(CLRb, OUTPUT);
+digitalWrite(CLRb, LOW);
+pinMode(SR2_IN, OUTPUT);
+digitalWrite(SR2_IN, LOW);
+pinMode(SPICLK2, OUTPUT);
+digitalWrite(SPICLK2, LOW);
+pinMode(L_CLK2, OUTPUT);
+digitalWrite(L_CLK2, LOW);
+pinMode(PLb, OUTPUT);
+digitalWrite(PLb, HIGH);
+pinMode(SR1_OUT, INPUT);
+pinMode(SR2_OUT, INPUT);
+
 //start Ethernet setup
-  Ethernet.init(10);  // Most Arduino shields
+  Ethernet.init(SS_ETHERNET);  // Most Arduino shields
   // initialize the Ethernet device
   Ethernet.begin(mac, ip);
     // Initialise serial at the configured baud rate
@@ -344,11 +400,12 @@ void setup() {
 
   // Start the interface in the configured mode
   delay(2000);
-  if(Ethernet.linkStatus() == LinkOFF){
-  gpibBus.begin();
-  linkOn = false;
-  }
-  else {
+  if(Ethernet.linkStatus() == LinkOFF)
+  {
+    gpibBus.begin();
+    linkOn = false;
+  }else
+  {
     linkOn = true;
   }
 
@@ -360,6 +417,7 @@ void setup() {
   dataPort.flush();
 //end GPIB setup
 
+
 }
 /****** End of Arduino standard SETUP procedure *****/
 
@@ -368,6 +426,14 @@ void setup() {
 void loop() {
   
   bool errFlg = false;
+  //test shift register code
+  //byte data[3] = {0xFF,0x02,0x03};
+  //byte readData[3];
+  //memset(readData, '\0', 3);
+  //serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+  
+  //parallelToSerial(readData, 3);
+
 
 // check for any new client connecting
   if (linkOn)
@@ -417,7 +483,7 @@ void loop() {
           }
 
           // Respond with OK      
-          clients[i].println("OK");
+          clients[i].println("OK.");
         }
       }
     }
@@ -439,7 +505,10 @@ void loop() {
   }
   else
   {
-
+    if(isInit)
+    {
+      isInit = false;
+    }
   /*** Macros ***/
   /*
   * Run the startup macro if enabled
@@ -1268,7 +1337,7 @@ void loop() {
     } else {
       // If auto mode is disabled we do a single read
       gpibBus.addressDevice(gpibBus.cfg.paddr, TALK);
-      gpibBus.receiveData(dataPort, readWithEoi, readWithEndByte, endByte);
+      gpibBus.receiveData(dataPort, readWithEoi, readWithEndByte, endByte, GPIB_Buf, GPIB_length);
     }
   }
 
@@ -1939,7 +2008,7 @@ void loop() {
           // Send string to instrument
           gpibBus.sendData(param, strlen(param));
           delay(tmdly);
-          gpibBus.receiveData(dataPort, gpibBus.cfg.eoi, false, 0);
+          gpibBus.receiveData(dataPort, gpibBus.cfg.eoi, false, 0, GPIB_Buf, GPIB_length);
         }
       } else {
         errBadCmd();
@@ -2516,8 +2585,15 @@ void loop() {
   /***** Device is addressed to listen - so listen *****/
   void device_listen_h() {
     DB_PRINT("In device listen function EZ: ", "");
-    // Receivedata params: stream, detectEOI, detectEndByte, endByte
-    gpibBus.receiveData(dataPort, false, false, 0x0);
+    // Receivedata params: stream, detectEOI, detectEndByte, endByte, *byte
+    gpibBus.receiveData(dataPort, false, false, 0x0, GPIB_Buf, &GPIB_length);
+    //AR_SERIAL_PORT.print("GPIB_Buf: ");
+    // for (byte j=0; j < GPIB_length; j++) {
+    //        AR_SERIAL_PORT.print((char) GPIB_Buf[j]);
+    //      }
+    //AR_SERIAL_PORT.println("");     
+    //AR_SERIAL_PORT.println(GPIB_length);  
+    parseGPIB(GPIB_Buf, GPIB_length);    
   }
 
 
@@ -2686,4 +2762,864 @@ void loop() {
 
     // Set bus to idle
     gpibBus.setControls(DIDS);
+}
+
+void parseGPIB(char *bytes, uint8_t *numbytes)
+{
+  if(strncmp(bytes, "PATHI01", 7) == 0)
+  {    
+    flushSRbuf();
+    SRbuf.pin.on7_6 = true;
+    SRbuf.pin.on1_6 = true;
+    SRbuf.pin.on15_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI02", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_6 = true;
+    SRbuf.pin.on1_1 = true;
+    SRbuf.pin.on16_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }  
+  if(strncmp(bytes, "PATHI03", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_6 = true;
+    SRbuf.pin.on1_2 = true;
+    SRbuf.pin.on17_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }  
+  if(strncmp(bytes, "PATHI04", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_1 = true;
+    SRbuf.pin.on3_6 = true;
+    SRbuf.pin.on18_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI05", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_1 = true;
+    SRbuf.pin.on3_1 = true;
+    SRbuf.pin.on19_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI06", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_1 = true;
+    SRbuf.pin.on3_2 = true;
+    SRbuf.pin.on20_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI07", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_2 = true;
+    SRbuf.pin.on5_6 = true;
+    SRbuf.pin.on21_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI08", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_2 = true;
+    SRbuf.pin.on5_1 = true;
+    SRbuf.pin.on22_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI09", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_2 = true;
+    SRbuf.pin.on5_2 = true;
+    SRbuf.pin.on23_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI10", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_6 = true;
+    SRbuf.pin.on1_5 = true;
+    SRbuf.pin.on24_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI11", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_6 = true;
+    SRbuf.pin.on1_4 = true;
+    SRbuf.pin.on25_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI12", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_6 = true;
+    SRbuf.pin.on1_3 = true;
+    SRbuf.pin.on26_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI13", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_1 = true;
+    SRbuf.pin.on3_5 = true;
+    SRbuf.pin.on27_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI14", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_1 = true;
+    SRbuf.pin.on3_4 = true;
+    SRbuf.pin.on28_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI15", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_1 = true;
+    SRbuf.pin.on3_3 = true;
+    SRbuf.pin.on29_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI16", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_2 = true;
+    SRbuf.pin.on5_5 = true;
+    SRbuf.pin.on30_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI17", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_2 = true;
+    SRbuf.pin.on5_4 = true;
+    SRbuf.pin.on31_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI18", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_2 = true;
+    SRbuf.pin.on5_3 = true;
+    SRbuf.pin.on32_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI19", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_5 = true;
+    SRbuf.pin.on9_6 = true;
+    SRbuf.pin.on33_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI20", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_5 = true;
+    SRbuf.pin.on9_1 = true;
+    SRbuf.pin.on34_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI21", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_5 = true;
+    SRbuf.pin.on9_2 = true;
+    SRbuf.pin.on35_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI22", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_4 = true;
+    SRbuf.pin.on11_6 = true;
+    SRbuf.pin.on36_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI23", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_4 = true;
+    SRbuf.pin.on11_1 = true;
+    SRbuf.pin.on37_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI24", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_4 = true;
+    SRbuf.pin.on11_2 = true;
+    SRbuf.pin.on38_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI25", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_3 = true;
+    SRbuf.pin.on13_6 = true;
+    SRbuf.pin.on39_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI26", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_3 = true;
+    SRbuf.pin.on13_1 = true;
+    SRbuf.pin.on40_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI27", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_3 = true;
+    SRbuf.pin.on13_2 = true;
+    SRbuf.pin.on41_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI28", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_5 = true;
+    SRbuf.pin.on9_5 = true;
+    SRbuf.pin.on42_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI29", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_5 = true;
+    SRbuf.pin.on9_4 = true;
+    SRbuf.pin.on43_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI30", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_5 = true;
+    SRbuf.pin.on9_3 = true;
+    SRbuf.pin.on44_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI31", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_4 = true;
+    SRbuf.pin.on11_5 = true;
+    SRbuf.pin.on45_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI32", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_4 = true;
+    SRbuf.pin.on11_4 = true;
+    SRbuf.pin.on46_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI33", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_4 = true;
+    SRbuf.pin.on11_3 = true;
+    SRbuf.pin.on47_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI34", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_3 = true;
+    SRbuf.pin.on13_5 = true;
+    SRbuf.pin.on48_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI35", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_3 = true;
+    SRbuf.pin.on13_4 = true;
+    SRbuf.pin.on49_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHI36", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on7_3 = true;
+    SRbuf.pin.on13_3 = true;
+    SRbuf.pin.on50_2 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO01", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_6 = true;
+    SRbuf.pin.on2_6 = true;
+    SRbuf.pin.on15_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO02", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_6 = true;
+    SRbuf.pin.on2_1 = true;
+    SRbuf.pin.on16_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }  
+  if(strncmp(bytes, "PATHO03", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_6 = true;
+    SRbuf.pin.on2_2 = true;
+    SRbuf.pin.on17_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }  
+  if(strncmp(bytes, "PATHO04", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_1 = true;
+    SRbuf.pin.on4_6 = true;
+    SRbuf.pin.on18_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO05", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_1 = true;
+    SRbuf.pin.on4_1 = true;
+    SRbuf.pin.on19_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO06", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_1 = true;
+    SRbuf.pin.on4_2 = true;
+    SRbuf.pin.on20_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO07", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_2 = true;
+    SRbuf.pin.on6_6 = true;
+    SRbuf.pin.on21_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO08", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_2 = true;
+    SRbuf.pin.on6_1 = true;
+    SRbuf.pin.on22_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO09", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_2 = true;
+    SRbuf.pin.on6_2 = true;
+    SRbuf.pin.on23_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO10", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_6 = true;
+    SRbuf.pin.on2_5 = true;
+    SRbuf.pin.on24_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO11", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_6 = true;
+    SRbuf.pin.on2_4 = true;
+    SRbuf.pin.on25_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO12", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_6 = true;
+    SRbuf.pin.on2_3 = true;
+    SRbuf.pin.on26_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO13", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_1 = true;
+    SRbuf.pin.on4_5 = true;
+    SRbuf.pin.on27_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO14", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_1 = true;
+    SRbuf.pin.on4_4 = true;
+    SRbuf.pin.on28_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO15", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_1 = true;
+    SRbuf.pin.on4_3 = true;
+    SRbuf.pin.on29_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO16", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_2 = true;
+    SRbuf.pin.on6_5 = true;
+    SRbuf.pin.on30_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO17", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_2 = true;
+    SRbuf.pin.on6_4 = true;
+    SRbuf.pin.on31_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO18", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_2 = true;
+    SRbuf.pin.on6_3 = true;
+    SRbuf.pin.on32_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO19", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_5 = true;
+    SRbuf.pin.on10_6 = true;
+    SRbuf.pin.on33_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO20", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_5 = true;
+    SRbuf.pin.on10_1 = true;
+    SRbuf.pin.on34_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO21", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_5 = true;
+    SRbuf.pin.on10_2 = true;
+    SRbuf.pin.on35_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO22", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_4 = true;
+    SRbuf.pin.on12_6 = true;
+    SRbuf.pin.on36_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO23", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_4 = true;
+    SRbuf.pin.on12_1 = true;
+    SRbuf.pin.on37_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO24", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_4 = true;
+    SRbuf.pin.on12_2 = true;
+    SRbuf.pin.on38_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO25", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_3 = true;
+    SRbuf.pin.on14_6 = true;
+    SRbuf.pin.on39_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO26", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_3 = true;
+    SRbuf.pin.on14_1 = true;
+    SRbuf.pin.on40_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO27", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_3 = true;
+    SRbuf.pin.on14_2 = true;
+    SRbuf.pin.on41_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO28", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_5 = true;
+    SRbuf.pin.on10_5 = true;
+    SRbuf.pin.on42_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO29", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_5 = true;
+    SRbuf.pin.on10_4 = true;
+    SRbuf.pin.on43_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO30", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_5 = true;
+    SRbuf.pin.on10_3 = true;
+    SRbuf.pin.on44_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO31", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_4 = true;
+    SRbuf.pin.on12_5 = true;
+    SRbuf.pin.on45_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO32", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_4 = true;
+    SRbuf.pin.on12_4 = true;
+    SRbuf.pin.on46_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO33", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_4 = true;
+    SRbuf.pin.on12_3 = true;
+    SRbuf.pin.on47_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO34", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_3 = true;
+    SRbuf.pin.on14_5 = true;
+    SRbuf.pin.on48_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO35", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_3 = true;
+    SRbuf.pin.on14_4 = true;
+    SRbuf.pin.on49_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHO36", 7) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_3 = true;
+    SRbuf.pin.on14_3 = true;
+    SRbuf.pin.on50_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "PATHPRESET", 10) == 0)
+  {
+    flushSRbuf();
+    SRbuf.pin.on8_1 = true;
+    SRbuf.pin.on2_1 = true;
+    SRbuf.pin.on16_2 = true;
+    SRbuf.pin.on7_1 = true;
+    SRbuf.pin.on1_1 = true;
+    SRbuf.pin.on15_1 = true;
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
+    respondDot();
+  }
+  if(strncmp(bytes, "*IDN?", 5) == 0)
+  {
+    AR_SERIAL_PORT.println(" FOUND valid string");
+    respondID();
+  }
+  *bytes = {0}; //clear buffer
+}
+
+void respondOK()
+{
+  flushPbuf();
+  String ok = "OK.";
+  ok.toCharArray(pBuf, PBSIZE);
+  pbPtr = strlen(pBuf);
+  lnRdy = 2;
+}
+
+void respondDot()
+{
+  flushPbuf();
+  addPbuf('.');
+  lnRdy = 2;
+}
+
+void respondID()
+{
+  flushPbuf();
+  String manufacturer = "QUANTIC CORRY,";
+  String model = "RFMS-2X36,";
+  String serial = "20230209001,";
+  String revision = "001";  
+  String id = manufacturer + model + serial + revision;
+  id.toCharArray(pBuf, PBSIZE);
+  pbPtr = strlen(pBuf);
+  lnRdy = 2;
+}
+
+void serialToParallel(byte *myDataOut, int numBytes)
+ {
+  // This shifts bits out MSB first on the rising edge of the clock, clock idles low
+  //internal function setup
+  int i=0;
+  int pinState;
+  //clear everything out just in case to
+  //prepare shift register for bit shifting
+  digitalWrite(SR1_IN, 0);
+  digitalWrite(SPICLK1, 0);
+  digitalWrite(L_CLK1, 0);
+  //for each bit in the byte myDataOut&#xFFFD;
+  //NOTICE THAT WE ARE COUNTING DOWN in our for loop
+  //This means that %00000001 or "1" will go through such
+  //that it will be pin Q0 that lights.
+  for (i = (numBytes-1); i >= 0; i--)
+  {
+    for (int j = 7; j >= 0; j--) 
+    {
+      digitalWrite(SPICLK1, 0);
+      //if the value passed to myDataOut and a bitmask result
+      // true then... so if we are at i=6 and our value is
+      // %11010100 it would the code compares it to %01000000
+      // and proceeds to set pinState to 1.
+      if (myDataOut[i] & (1<<j) ) 
+      {
+        pinState= 1;
+      }
+      else 
+      {
+        pinState= 0;
+      }
+      //Sets the pin to HIGH or LOW depending on pinState
+      digitalWrite(SR1_IN, pinState);
+      //register shifts bits on upstroke of clock pin
+      digitalWrite(SPICLK1, 1);
+      //zero the data pin after shift to prevent bleed through
+      digitalWrite(SR1_IN, 0);
+    }
+  }
+  //stop shifting
+  digitalWrite(SR1_IN, 0);
+  digitalWrite(SPICLK1, 0);
+  digitalWrite(L_CLK1, 1);
+  _delay_us(25);
+  digitalWrite(L_CLK1, 0);
+}
+
+void parallelToSerial(byte *myDataOut, int numBytes)
+ {
+  //Parallel load then prepare shift register for bit shifting
+  digitalWrite(PLb, 0);
+  _delay_us(25);
+  digitalWrite(L_CLK2, 1);
+  digitalWrite(SR2_IN, 0);
+  digitalWrite(SPICLK2, 0);
+  digitalWrite(L_CLK2, 0);
+  digitalWrite(PLb, 1);
+  //for each bit in the byte myDataOut&#xFFFD;
+  //NOTICE THAT WE ARE COUNTING DOWN in our for loop
+  //This means that %00000001 or "1" will go through such
+  //that it will be pin Q0 that lights.
+  for (int i = (numBytes-1); i >= 0; i--)
+  {
+    for (int j = 7; j >= 0; j--) 
+    {
+      //register shifts bits on upstroke of clock pin
+      digitalWrite(SPICLK2, 1);
+      _delay_us(5);
+      myDataOut[i] |= (digitalRead(SR2_OUT) << j);     
+      digitalWrite(SPICLK2, 0);
+      _delay_us(5);
+    }
+  }
+  //stop shifting
+  digitalWrite(SPICLK2, 0);
+  digitalWrite(L_CLK2, 0);
+  digitalWrite(PLb, 1);
+}
+
+void flushSRbuf()
+{ 
+  for(int i=0; i < sizeof(SRbuf); i++)
+  {
+    SRbuf.byte[i] = 0;
+  }
 }

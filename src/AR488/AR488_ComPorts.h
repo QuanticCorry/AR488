@@ -84,23 +84,4 @@
 
 #endif  // DEBUG_ENABLE
 
-
-/***** BlueTooth Functions *****/
-
-#ifdef AR_SERIAL_BT_ENABLE
-
-//  #define BTRBSIZE 64
-
-  const size_t BTrbufSize = 64;
-
-  void btInit();
-  void blinkLed(uint8_t count);
-  bool btChkCfg();
-  bool btCfg();
-  bool detectBaud();
-  bool atReply(const char* reply);
-
-#endif
-
-
 #endif  // AR488_COMPORTS_H

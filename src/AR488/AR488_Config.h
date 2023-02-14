@@ -179,16 +179,36 @@
 /***** 8-way address DIP switch *****/
 //#define DIP_SWITCH
 #ifdef DIP_SWITCH
-#define DIP_SW_1  A0
-#define DIP_SW_2  A1
-#define DIP_SW_3  A2
-#define DIP_SW_4  A3
-#define DIP_SW_5  A4
-#define DIP_SW_6  A5
-#define DIP_SW_7  A6
-#define DIP_SW_8  A7
+#define DIP_SW_1  A8
+#define DIP_SW_2  A9
+#define DIP_SW_3  A10
+#define DIP_SW_4  A11
+#define DIP_SW_5  A12
+#define DIP_SW_6  A13
+#define DIP_SW_7  A14
+#define DIP_SW_8  A15
 
 #endif
+
+#define VIN_24  A0
+#define VIN_12  A1
+#define V_TEMP  A2
+
+#define SS_ETHERNET   10
+#define GP_LED        7
+#define FAN_ON        19
+#define STATUS_IND    20
+#define POWERGOOD     21
+#define SR1_IN        23
+#define SPICLK1       31
+#define L_CLK1        29
+#define CLRb          27
+#define SR1_OUT       25
+#define SR2_IN        41
+#define SPICLK2       39
+#define L_CLK2        37
+#define PLb           35
+#define SR2_OUT       33
 
 /***** DEBUG LEVEL OPTIONS *****/
 /*
@@ -197,7 +217,7 @@
 
 #ifdef DEBUG_ENABLE
   // Main module
-  //#define DEBUG_SERIAL_INPUT    // serialIn_h(), parseInput_h()
+  #define DEBUG_SERIAL_INPUT    // serialIn_h(), parseInput_h()
   //#define DEBUG_CMD_PARSER      // getCmd()
   //#define DEBUG_SEND_TO_INSTR   // sendToInstrument();
   //#define DEBUG_SPOLL           // spoll_h()
@@ -205,7 +225,7 @@
   //#define DEBUG_IDFUNC          // ID command
 
   // AR488_GPIBbus module
-  //#define DEBUG_GPIBbus_RECEIVE // GPIBbus::receiveData(), GPIBbus::readByte()
+  #define DEBUG_GPIBbus_RECEIVE // GPIBbus::receiveData(), GPIBbus::readByte()
   //#define DEBUG_GPIBbus_SEND    // GPIBbus::sendData()
   //#define DEBUG_GPIBbus_CONTROL // GPIBbus::setControls() 
   //#define DEBUG_GPIB_COMMANDS   // GPIBbus::sendCDC(), GPIBbus::sendLLO(), GPIBbus::sendLOC(), GPIBbus::sendGTL(), GPIBbus::sendMSA() 
@@ -352,6 +372,174 @@ M3\n\
 /******vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv******/
 
 #define AR_CFG_SIZE 84
+
+typedef union shiftRegister
+{
+  struct pin
+  {
+    bool on1_1 : 1;
+    bool on1_2 : 1;
+    bool on1_3 : 1;
+    bool on1_4 : 1;
+    bool on1_5 : 1;
+    bool on1_6 : 1;
+    bool on2_1 : 1;
+    bool on2_2 : 1;
+    bool on2_3 : 1;
+    bool on2_4 : 1;
+    bool on2_5 : 1;
+    bool on2_6 : 1;
+    bool on3_1 : 1;
+    bool on3_2 : 1;
+    bool on3_3 : 1;
+    bool on3_4 : 1;
+    bool on3_5 : 1;
+    bool on3_6 : 1;
+    bool on4_1 : 1;
+    bool on4_2 : 1;
+    bool on4_3 : 1;
+    bool on4_4 : 1;
+    bool on4_5 : 1;
+    bool on4_6 : 1;
+    bool on5_1 : 1;
+    bool on5_2 : 1;
+    bool on5_3 : 1;
+    bool on5_4 : 1;
+    bool on5_5 : 1;
+    bool on5_6 : 1;
+    bool on6_1 : 1;
+    bool on6_2 : 1;
+    bool on6_3 : 1;
+    bool on6_4 : 1;
+    bool on6_5 : 1;
+    bool on6_6 : 1;
+    bool on7_1 : 1;
+    bool on7_2 : 1;
+    bool on7_3 : 1;
+    bool on7_4 : 1;
+    bool on7_5 : 1;
+    bool on7_6 : 1;
+    bool on8_1 : 1;
+    bool on8_2 : 1;
+    bool on8_3 : 1;
+    bool on8_4 : 1;
+    bool on8_5 : 1;
+    bool on8_6 : 1;
+    bool on9_1 : 1;
+    bool on9_2 : 1;
+    bool on9_3 : 1;
+    bool on9_4 : 1;
+    bool on9_5 : 1;
+    bool on9_6 : 1;
+    bool on10_1 : 1;
+    bool on10_2 : 1;
+    bool on10_3 : 1;
+    bool on10_4 : 1;
+    bool on10_5 : 1;
+    bool on10_6 : 1;
+    bool on11_1 : 1;
+    bool on11_2 : 1;
+    bool on11_3 : 1;
+    bool on11_4 : 1;
+    bool on11_5 : 1;
+    bool on11_6 : 1;
+    bool on12_1 : 1;
+    bool on12_2 : 1;
+    bool on12_3 : 1;
+    bool on12_4 : 1;
+    bool on12_5 : 1;
+    bool on12_6 : 1;
+    bool on13_1 : 1;
+    bool on13_2 : 1;
+    bool on13_3 : 1;
+    bool on13_4 : 1;
+    bool on13_5 : 1;
+    bool on13_6 : 1;
+    bool on14_1 : 1;
+    bool on14_2 : 1;
+    bool on14_3 : 1;
+    bool on14_4 : 1;
+    bool on14_5 : 1;
+    bool on14_6 : 1;
+    bool test1 : 1;
+    bool test2 : 1;
+    bool test3 : 1;
+    bool test4 : 1;
+    bool on15_1 : 1;
+    bool on15_2 : 1;
+    bool on16_1 : 1;
+    bool on16_2 : 1;
+    bool on17_1 : 1;
+    bool on17_2 : 1;
+    bool on18_1 : 1;
+    bool on18_2 : 1;
+    bool on19_1 : 1;
+    bool on19_2 : 1;
+    bool on20_1 : 1;
+    bool on20_2 : 1;
+    bool on21_1 : 1;
+    bool on21_2 : 1;
+    bool on22_1 : 1;
+    bool on22_2 : 1;
+    bool on23_1 : 1;
+    bool on23_2 : 1;
+    bool on24_1 : 1;
+    bool on24_2 : 1;
+    bool on25_1 : 1;
+    bool on25_2 : 1;
+    bool on26_1 : 1;
+    bool on26_2 : 1;
+    bool on27_1 : 1;
+    bool on27_2 : 1;
+    bool on28_1 : 1;
+    bool on28_2 : 1;
+    bool on29_1 : 1;
+    bool on29_2 : 1;
+    bool on30_1 : 1;
+    bool on30_2 : 1;
+    bool on31_1 : 1;
+    bool on31_2 : 1;
+    bool on32_1 : 1;
+    bool on32_2 : 1;
+    bool on33_1 : 1;
+    bool on33_2 : 1;
+    bool on34_1 : 1;
+    bool on34_2 : 1;
+    bool on35_1 : 1;
+    bool on35_2 : 1;
+    bool on36_1 : 1;
+    bool on36_2 : 1;
+    bool on37_1 : 1;
+    bool on37_2 : 1;
+    bool on38_1 : 1;
+    bool on38_2 : 1;
+    bool on39_1 : 1;
+    bool on39_2 : 1;
+    bool on40_1 : 1;
+    bool on40_2 : 1;
+    bool on41_1 : 1;
+    bool on41_2 : 1;
+    bool on42_1 : 1;
+    bool on42_2 : 1;
+    bool on43_1 : 1;
+    bool on43_2 : 1;
+    bool on44_1 : 1;
+    bool on44_2 : 1;
+    bool on45_1 : 1;
+    bool on45_2 : 1;
+    bool on46_1 : 1;
+    bool on46_2 : 1;
+    bool on47_1 : 1;
+    bool on47_2 : 1;
+    bool on48_1 : 1;
+    bool on48_2 : 1;
+    bool on49_1 : 1;
+    bool on49_2 : 1;
+    bool on50_1 : 1;
+    bool on50_2 : 1;      
+  } pin;
+  uint8_t byte[20];
+} shiftRegister;
 
 /******^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^******/
 /***** MISCELLANEOUS DECLARATIONS *****/

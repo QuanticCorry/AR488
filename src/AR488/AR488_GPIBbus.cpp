@@ -444,10 +444,10 @@ bool GPIBbus::sendCmd(uint8_t cmdByte){
  * Readbreak:
  * 7 - command received via serial
  */
-bool GPIBbus::receiveData(Stream& dataStream, bool detectEoi, bool detectEndByte, uint8_t endByte) {
+bool GPIBbus::receiveData(Stream& dataStream, bool detectEoi, bool detectEndByte, uint8_t endByte, uint8_t *bytes, uint8_t *numbytes) {
 
   uint8_t r = 0; //, db;
-  uint8_t bytes[3] = {0};
+//  uint8_t bytes[3] = {0};
   uint8_t eor = cfg.eor&7;
   int x = 0;
   bool readWithEoi = false;
@@ -506,7 +506,7 @@ bool GPIBbus::receiveData(Stream& dataStream, bool detectEoi, bool detectEndByte
     } 
     
     // Read the next character on the GPIB bus
-    r = readByte(&bytes[0], readWithEoi, &eoiDetected);
+    r = readByte(&bytes[x], readWithEoi, &eoiDetected);
 
     if (isAsserted(ATN)) r = 2;
 
@@ -516,10 +516,10 @@ bool GPIBbus::receiveData(Stream& dataStream, bool detectEoi, bool detectEndByte
     // If successfully received character
     if (r==0) {
 #ifdef DEBUG_GPIBbus_RECEIVE
-      DB_HEX_PRINT(bytes[0]);
+      DB_HEX_PRINT(bytes[x]);
 #else
       // Output the character to the serial port
-      dataStream.print((char)bytes[0]);
+      dataStream.print((char)bytes[x]);
 #endif
 
       // Byte counter
@@ -539,16 +539,17 @@ bool GPIBbus::receiveData(Stream& dataStream, bool detectEoi, bool detectEndByte
           if (isTerminatorDetected(bytes, eor)) break;
         }
       }
-
-      // Shift last three bytes in memory
-      bytes[2] = bytes[1];
-      bytes[1] = bytes[0];
+ 
+      // Shift bytes in memory
+      //bytes[2] = bytes[1];
+      //bytes[1] = bytes[0];
     }else{
       // Stop (error or timeout)
       break;
     }
   }
 
+    *numbytes = x;
 #ifdef DEBUG_GPIBbus_RECEIVE
   DB_PRINT(F("mode is "), cfg.cmode);
   DB_RAW_PRINTLN();
