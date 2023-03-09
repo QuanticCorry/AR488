@@ -142,6 +142,7 @@
 #define SRQ   47  /* GPIB 10 : PORTG bit 2 */
 #define ATN   49  /* GPIB 11 : PORTG bit 0  */
 
+
 /*
 // PCINT registers
 #ifdef USE_INTERRUPTS
