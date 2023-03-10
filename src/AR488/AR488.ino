@@ -12,12 +12,8 @@
 
 //TODO
 /*
-DIP switches for address
-temperature reading and control of fan
 Status LED
 Power LED and analog input to read 12V nd 24V inputs
-verify relays are set correctly using parallelToSerial() and populate response buffer with "OK." when true, else "."
-implement ethernet/telnet part of code
 ability to change IP address???
 */
 
@@ -273,6 +269,12 @@ bool linkOn = false;
 /***** COMMON CODE SECTION *****/
 /***** vvvvvvvvvvvvvvvvvvv *****/
 
+bool powerGood = false;
+bool fanOn = false;
+bool statusLedState = false;
+const int statusLedInterval = 1000;
+unsigned long lastTime = millis();
+
 
 /******  Arduino standard SETUP procedure *****/
 void setup() {
@@ -287,9 +289,9 @@ digitalWrite(GP_LED, LOW);
 pinMode(FAN_ON, OUTPUT);
 digitalWrite(FAN_ON, LOW);
 pinMode(STATUS_IND, OUTPUT);
-digitalWrite(STATUS_IND, LOW);
+digitalWrite(STATUS_IND, HIGH);
 pinMode(POWERGOOD, OUTPUT);
-digitalWrite(POWERGOOD, LOW);
+digitalWrite(POWERGOOD, HIGH);
 pinMode(SR1_IN, OUTPUT);
 digitalWrite(SR1_IN, LOW);
 pinMode(SPICLK1, OUTPUT);
@@ -308,6 +310,26 @@ pinMode(PLb, OUTPUT);
 digitalWrite(PLb, HIGH);
 pinMode(SR1_OUT, INPUT);
 pinMode(SR2_OUT, INPUT);
+pinMode(DIP_SW_1, INPUT);
+pinMode(DIP_SW_2, INPUT);
+pinMode(DIP_SW_3, INPUT);
+pinMode(DIP_SW_4, INPUT);
+pinMode(DIP_SW_5, INPUT);
+pinMode(DIP_SW_6, INPUT);
+pinMode(DIP_SW_7, INPUT);
+pinMode(DIP_SW_8, INPUT);
+
+byte DipAddress = 0;
+DipAddress |= (digitalRead(DIP_SW_8) << 7);
+DipAddress |= (digitalRead(DIP_SW_7) << 6);
+DipAddress |= (digitalRead(DIP_SW_6) << 5);
+DipAddress |= (digitalRead(DIP_SW_5) << 4);
+DipAddress |= (digitalRead(DIP_SW_4) << 3);
+DipAddress |= (digitalRead(DIP_SW_3) << 2);
+DipAddress |= (digitalRead(DIP_SW_2) << 1);
+DipAddress |= digitalRead(DIP_SW_1);
+
+IPAddress ip(192, 168, 13, DipAddress);
 
 //start Ethernet setup
   Ethernet.init(SS_ETHERNET);  // Most Arduino shields
@@ -372,6 +394,16 @@ pinMode(SR2_OUT, INPUT);
   }
 #endif
 
+//Set GPIB adddress based on DIP switches
+if(DipAddress < 30)
+{
+  gpibBus.cfg.paddr = DipAddress;
+} else
+{
+  gpibBus.cfg.paddr = 30;  
+}
+
+
   // SN7516x IC support
 #ifdef SN7516X
   pinMode(SN7516X_TE, OUTPUT);
@@ -428,16 +460,42 @@ digitalWrite(CLRb, HIGH);
 void loop() {
   
   bool errFlg = false;
-  //test shift register code
-  //byte data[3] = {0xFF,0x02,0x03};
-  //byte readData[3];
-  //memset(readData, '\0', 3);
-  //serialToParallel(&SRbuf.byte[0], sizeof(SRbuf));
-  
-  //parallelToSerial(readData, 3);
 
+  //Handle input voltage and temperature checks for fan turn on
+  if((analogRead(A0) > 752) && (analogRead(A0) < 889) && //A0 between 22V-26V
+     (analogRead(A1) > 342) && (analogRead(A1) < 479))   //A1 between 10V-14V
+  {
+    digitalWrite(POWERGOOD, HIGH);
+  } 
+  else
+  {
+    digitalWrite(POWERGOOD, LOW);
+  }  
+  // check if we should change fan state
+  if((!fanOn) && (analogRead(A2) > 193)) // 28 degrees Celcius
+  {
+    fanOn = true;
+    digitalWrite(FAN_ON, HIGH);
+  }
+  // 3 degrees Celsius of hysteresis
+  if((fanOn) && (analogRead(A2) <= 182)) // 25 degrees Celcius
+  {
+    fanOn = false;
+    digitalWrite(FAN_ON, LOW);
+  }
 
-// check for any new client connecting
+  if(millis() >= (statusLedInterval + lastTime))
+  {
+    lastTime = millis();
+    statusLedState = !statusLedState;
+    digitalWrite(STATUS_IND, statusLedState);
+  }
+  else
+  {
+    if(lastTime > millis()) lastTime = millis(); //when millis() rolls over after about 50 days
+  }
+
+  // check for any new client connecting
   if (linkOn)
   {
 
@@ -532,16 +590,11 @@ void loop() {
   * lnRdy=2: send data to Gpib
   */
 
-    /*
-  if (lnRdy>0){
-    dataPort.print(F("lnRdy1: "));
-    dataPort.println(lnRdy);
-  }
-  */
-
     // lnRdy=1: received a command so execute it...
-    if (lnRdy == 1) {
-      if (autoRead) {
+    if (lnRdy == 1) 
+    {
+      if (autoRead) 
+      {
         // Issuing any command stops autoread mode
         autoRead = false;
         gpibBus.unAddressDevice();
@@ -549,53 +602,26 @@ void loop() {
       execCmd(pBuf, pbPtr);
     }
 
-
-
     // Device mode:
-    if (gpibBus.isController() == false) {
-      if (isTO > 0) {
-        //      if (lnRdy == 2) sendToInstrument(pBuf, pbPtr);
+    if (gpibBus.isController() == false)
+    {
+      if (isTO > 0) 
+      {
         tonMode();
-      } else if (isRO) {
+      } else if (isRO) 
+      {
         lonMode();
-      } else if (gpibBus.isAsserted(ATN)) {
-        //      dataPort.println(F("Attention signal detected"));
+      } else if (gpibBus.isAsserted(ATN)) 
+      {
         attnRequired();
-        //      dataPort.println(F("ATN loop finished"));
       }
 
       // Can't send in LON mode so just clear the buffer
-      if (isProm) {
+      if (isProm) 
+      {
         if (lnRdy == 2) flushPbuf();
       }
-
-      /*    
-      else{
-        if (lnRdy == 2) sendToInstrument(pBuf, pbPtr);
-      }
-  */
     }
-
-    // Reset line ready flag
-    //  lnRdy = 0;
-
-    // IDN query ?
-    if (sendIdn) {
-      if (gpibBus.cfg.idn == 1) dataPort.println(gpibBus.cfg.sname);
-      if (gpibBus.cfg.idn == 2) {
-        dataPort.print(gpibBus.cfg.sname);
-        dataPort.print("-");
-        dataPort.println(gpibBus.cfg.serial);
-      }
-      sendIdn = false;
-    }
-
-    /*
-  if (lnRdy>0){
-    dataPort.print(F("lnRdy2: "));
-    dataPort.println(lnRdy);
-  }
-  */
 
     // If charaters waiting in the serial input buffer then call handler
     if (dataPort.available()) lnRdy = serialIn_h();
@@ -605,28 +631,17 @@ void loop() {
   }
   /***** END MAIN LOOP *****/
 
-
-  /***** Initialise the interface *****/
-  /*
-  void initAR488() {
-    // Set default values ({'\0'} sets version string array to null)
-    gpibBus.cfg = {false, false, 2, 0, 1, 0, 0, 0, 0, 1200, 0, {'\0'}, 0, {'\0'}, 0, 0};
-  }
-  */
-
   /***** Initialise device mode *****/
   void initDevice() {
     gpibBus.stop();
     gpibBus.startDeviceMode();
   }
 
-
   /***** Initialise controller mode *****/
   void initController() {
     gpibBus.stop();
     gpibBus.startControllerMode();
   }
-
 
   /***** Serial event handler *****/
   /*

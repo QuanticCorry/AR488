@@ -177,8 +177,7 @@
 
 
 /***** 8-way address DIP switch *****/
-//#define DIP_SWITCH
-#ifdef DIP_SWITCH
+
 #define DIP_SW_1  A8
 #define DIP_SW_2  A9
 #define DIP_SW_3  A10
@@ -187,8 +186,6 @@
 #define DIP_SW_6  A13
 #define DIP_SW_7  A14
 #define DIP_SW_8  A15
-
-#endif
 
 #define VIN_24  A0
 #define VIN_12  A1
