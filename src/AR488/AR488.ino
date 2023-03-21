@@ -274,6 +274,11 @@ bool fanOn = false;
 bool statusLedState = false;
 const int statusLedInterval = 1000;
 unsigned long lastTime = millis();
+unsigned long lastTimeMicro = micros();
+bool gpLed = false;
+uint16_t analog24V = 0;
+uint16_t analog12V = 0;
+uint16_t analogTemp = 0;
 
 
 /******  Arduino standard SETUP procedure *****/
@@ -284,6 +289,8 @@ void setup() {
   wdt_disable();
 #endif
 
+//pinMode(45, OUTPUT); //DC pin on SN75161
+//digitalWrite(45, LOW); //DC pin on SN75161
 pinMode(GP_LED, OUTPUT);
 digitalWrite(GP_LED, LOW);
 pinMode(FAN_ON, OUTPUT);
@@ -458,37 +465,41 @@ digitalWrite(CLRb, HIGH);
 
 /***** ARDUINO MAIN LOOP *****/
 void loop() {
-  
-  bool errFlg = false;
 
-  //Handle input voltage and temperature checks for fan turn on
-  if((analogRead(A0) > 752) && (analogRead(A0) < 889) && //A0 between 22V-26V
-     (analogRead(A1) > 342) && (analogRead(A1) < 479))   //A1 between 10V-14V
-  {
-    digitalWrite(POWERGOOD, HIGH);
-  } 
-  else
-  {
-    digitalWrite(POWERGOOD, LOW);
-  }  
-  // check if we should change fan state
-  if((!fanOn) && (analogRead(A2) > 193)) // 28 degrees Celcius
-  {
-    fanOn = true;
-    digitalWrite(FAN_ON, HIGH);
-  }
-  // 3 degrees Celsius of hysteresis
-  if((fanOn) && (analogRead(A2) <= 182)) // 25 degrees Celcius
-  {
-    fanOn = false;
-    digitalWrite(FAN_ON, LOW);
-  }
+  bool errFlg = false;
 
   if(millis() >= (statusLedInterval + lastTime))
   {
     lastTime = millis();
     statusLedState = !statusLedState;
     digitalWrite(STATUS_IND, statusLedState);
+
+    analog24V = analogRead(A0);
+    analog12V = analogRead(A1);
+    analogTemp = analogRead(A2);
+
+    //Handle input voltage and temperature checks for fan turn on
+    if((analog24V > 752) && (analog24V < 889) && //A0 between 22V-26V
+      (analog12V > 342) && (analog12V < 479))   //A1 between 10V-14V
+    {
+      digitalWrite(POWERGOOD, HIGH);
+    } 
+    else
+    {
+      digitalWrite(POWERGOOD, LOW);
+    }  
+    // check if we should change fan state
+    if((!fanOn) && (analogTemp > 193)) // 28 degrees Celcius
+    {
+      fanOn = true;
+      digitalWrite(FAN_ON, HIGH);
+    }
+    // 3 degrees Celsius of hysteresis
+    if((fanOn) && (analogTemp <= 182)) // 25 degrees Celcius
+    {
+      fanOn = false;
+      digitalWrite(FAN_ON, LOW);
+    }
   }
   else
   {
@@ -560,7 +571,7 @@ void loop() {
       }
     }
   }
-  else
+  else 
   {
     if(isInit)
     {
@@ -613,6 +624,7 @@ void loop() {
         lonMode();
       } else if (gpibBus.isAsserted(ATN)) 
       {
+        digitalWrite(GP_LED, HIGH);
         attnRequired();
       }
 
@@ -2326,6 +2338,7 @@ void loop() {
   * In device mode is invoked whenever ATN is asserted
   */
   void attnRequired() {
+    gpibBus.setControls(DLAS);
 
     const uint8_t cmdbuflen = 35;
     uint8_t cmdbytes[5] = { 0 };
@@ -2348,7 +2361,7 @@ void loop() {
   #endif
 
     // Set device listner active state (assert NDAC+NRFD (low), DAV=INPUT_PULLUP)
-    gpibBus.setControls(DLAS);
+    //gpibBus.setControls(DLAS);
 
     /***** ATN read loop *****/
     // Read bytes received while ATN is asserted
@@ -2462,7 +2475,7 @@ void loop() {
 
     /***** If addressed, then perform the appropriate actions *****/
     if (addressed) {
-
+  digitalWrite(GP_LED, LOW);      
       // If we have a primary GPIB command then execute it
       if (gpibcmd) {
         // Respond to GPIB command
@@ -3290,12 +3303,56 @@ String parse(char *bytes)
   if(strncmp(bytes, "PATHPRESET", 10) == 0)
   {
     changeSR = true;
-    SRbuf.pin.on8_1 = true;
+    SRbuf.pin.on1_6 = true;
     SRbuf.pin.on2_1 = true;
-    SRbuf.pin.on16_2 = true;
+    SRbuf.pin.on3_6 = true;
+    SRbuf.pin.on4_1 = true;
+    SRbuf.pin.on5_6 = true;
+    SRbuf.pin.on6_1 = true;
     SRbuf.pin.on7_1 = true;
-    SRbuf.pin.on1_1 = true;
+    SRbuf.pin.on8_1 = true;
+    SRbuf.pin.on9_6 = true;
+    SRbuf.pin.on10_1 = true;
+    SRbuf.pin.on11_6 = true;
+    SRbuf.pin.on12_1 = true;
+    SRbuf.pin.on13_6 = true;
+    SRbuf.pin.on14_1 = true;
     SRbuf.pin.on15_1 = true;
+    SRbuf.pin.on16_2 = true;
+    SRbuf.pin.on17_1 = true;
+    SRbuf.pin.on18_1 = true;
+    SRbuf.pin.on19_2 = true;
+    SRbuf.pin.on20_1 = true;
+    SRbuf.pin.on21_1 = true;
+    SRbuf.pin.on22_2 = true;
+    SRbuf.pin.on23_1 = true;
+    SRbuf.pin.on24_1 = true;
+    SRbuf.pin.on25_1 = true;
+    SRbuf.pin.on26_1 = true;
+    SRbuf.pin.on27_1 = true;
+    SRbuf.pin.on28_1 = true;
+    SRbuf.pin.on29_1 = true;
+    SRbuf.pin.on30_1 = true;
+    SRbuf.pin.on31_1 = true;
+    SRbuf.pin.on32_1 = true;
+    SRbuf.pin.on33_1 = true;
+    SRbuf.pin.on34_2 = true;
+    SRbuf.pin.on35_1 = true;
+    SRbuf.pin.on36_1 = true;
+    SRbuf.pin.on37_2 = true;
+    SRbuf.pin.on38_1 = true;
+    SRbuf.pin.on39_1 = true;
+    SRbuf.pin.on40_2 = true;
+    SRbuf.pin.on41_1 = true;
+    SRbuf.pin.on42_1 = true;
+    SRbuf.pin.on43_1 = true;
+    SRbuf.pin.on44_1 = true;
+    SRbuf.pin.on45_1 = true;
+    SRbuf.pin.on46_1 = true;
+    SRbuf.pin.on47_1 = true;
+    SRbuf.pin.on48_1 = true;
+    SRbuf.pin.on49_1 = true;
+    SRbuf.pin.on50_1 = true;
   }
   if(strncmp(bytes, "*IDN?", 5) == 0)
   {
