@@ -250,7 +250,7 @@ byte mac[] = {
   0xA8, 0x61, 0x0A, 0xAE, 0x97, 0x46
 };
 
-IPAddress ip(192, 168, 13, 177);
+IPAddress ip(192, 168, 1, 177);
 
 const int numberOfClients = 2;
 const int sizeOfBuffer = 80;
@@ -336,7 +336,7 @@ DipAddress |= (digitalRead(DIP_SW_3) << 2);
 DipAddress |= (digitalRead(DIP_SW_2) << 1);
 DipAddress |= digitalRead(DIP_SW_1);
 
-IPAddress ip(192, 168, 13, DipAddress);
+IPAddress ip(192, 168, 1, DipAddress);
 
 //start Ethernet setup
   Ethernet.init(SS_ETHERNET);  // Most Arduino shields
